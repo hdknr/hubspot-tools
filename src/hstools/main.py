@@ -2,9 +2,8 @@ import click
 
 
 @click.group()
-@click.option("--tf_output", "-to", default=None)
 @click.pass_context
-def main(ctx, tf_output):
+def main(ctx):
     ctx.ensure_object(dict)
 
 
