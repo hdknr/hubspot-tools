@@ -10,11 +10,26 @@ dependencies = [
 ]
 
 [project.scripts]
-hstools = "hstools.main:main"
+hstools = "hstools.commands:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
 
+# Build
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+    "src/hstools", 
+]
+[tool.hatch.build.targets.sdist]
+packages = ["src/hstools"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hstools"]
+
+# Ruff
 
 [tool.ruff]
 # 1行の最大文字数
