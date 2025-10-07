@@ -1,4 +1,3 @@
-import click
 import json
 import os
 import re
@@ -6,19 +5,18 @@ from mimetypes import guess_type
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlsplit
 
+import click
 from bs4 import BeautifulSoup as Soup
 
-@click.group()
-@click.pass_context
-def html(ctx):
-    pass
 
-
-def generate_new_path(original_path):
+def generate_new_path(original_path, profile=None):
     """
     オリジナルのパスを新しいパターンに置換する関数。
     """
     original_path = str((Path("/") / original_path).resolve())
+    if profile and "path_prefix" in profile:
+        original_path = original_path.replace(profile["path_prefix"], "")
+    original_path = original_path.replace("//", "/")
     THEME = os.environ["HUBSPOT_FOLDER"]
     public_path = f"{{{{get_asset_url('/{THEME}{original_path}') }}}}"
     return public_path
@@ -50,7 +48,7 @@ def change_assert_url_tag(asset_tag, profile=None):
         asset_tag[attr_name] = original_src
         return
 
-    new_src = generate_new_path(original_src)
+    new_src = generate_new_path(original_src, profile=profile)
 
     asset_tag[attr_name] = new_src
     click.echo(f"置き換え:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
@@ -66,8 +64,6 @@ def change_asset_url(soup, profile=None):
     _ = [change_assert_url_tag(tag, profile=profile) for tag in img_tags]
 
 
-
-
 def change_anchor_url_rule(href, profile: dict):
     url = unquote(href)
     obj = urlsplit(url)
@@ -78,9 +74,9 @@ def change_anchor_url_rule(href, profile: dict):
 
     mtype, _ = guess_type(path)
     if mtype and mtype.startswith("image"):
-        return generate_new_path(path)
+        return generate_new_path(path, profile=profile)
 
-    rules = profile.get("rules", None) or []
+    rules = profile.get("anchor_rules", None) or []
     for rule in rules:
         if re.search(rf"{rule[0]}", path):
             path = re.sub(rf"{rule[0]}", rf"{rule[1]}", path)
@@ -147,6 +143,13 @@ def load_profile(profile):
     profile_data = json.load(open(profile))
     return profile_data
 
+
+@click.group()
+@click.pass_context
+def html(ctx):
+    pass
+
+
 @html.command()
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--profile", "-p", default=None)
@@ -175,9 +178,7 @@ def asset_url(ctx, input_file, profile, output_file):
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(str(soup))
 
-        click.echo(
-            f'処理が完了しました。修正されたHTMLは "{output_file}" に保存されました。'
-        )
+        click.echo(f'処理が完了しました。修正されたHTMLは "{output_file}" に保存されました。')
 
     except Exception as e:
         click.echo(f"エラーが発生しました: {e}", err=True)
