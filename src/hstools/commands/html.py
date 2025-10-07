@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse, urlsplit
 
 import click
+import cssutils
 from bs4 import BeautifulSoup as Soup
 
 
@@ -145,17 +146,18 @@ def load_profile(profile):
 
 
 @click.group()
+@click.option("--profile", "-p", default=None)
 @click.pass_context
-def html(ctx):
+def html(ctx, profile):
+    ctx.obj["profile"] = load_profile(profile)
     pass
 
 
 @html.command()
 @click.argument("input_file", type=click.Path(exists=True))
-@click.option("--profile", "-p", default=None)
 @click.option("--output_file", "-o", type=click.Path(), default=None)
 @click.pass_context
-def asset_url(ctx, input_file, profile, output_file):
+def asset_url(ctx, input_file, output_file):
     """
     HTMLファイル内の<img>タグのsrc属性のパスを一括置換するコマンドラインツール。
 
@@ -167,12 +169,11 @@ def asset_url(ctx, input_file, profile, output_file):
         output_file = str(path.parent / f"out.{path.name}")
 
     try:
-        profile_data = load_profile(profile)
         click.echo(f'ファイル "{input_file}" を読み込んでいます...')
         with open(input_file, encoding="utf-8") as f:
             soup = Soup(f, "html.parser")
 
-        change_asset_url(soup, profile=profile_data)
+        change_asset_url(soup, profile=ctx.obj["profile"])
 
         click.echo(f'修正されたHTMLを "{output_file}" に書き込みます...')
         with open(output_file, "w", encoding="utf-8") as f:
@@ -182,6 +183,56 @@ def asset_url(ctx, input_file, profile, output_file):
 
     except Exception as e:
         click.echo(f"エラーが発生しました: {e}", err=True)
+
+
+def update_css_url_paths(sheet, profile=None):
+    """CSSの url を 公開URLに変更"""
+    # 2. 全てのルールとプロパティを走査し、url()を含むものを探す
+    for rule in sheet:
+        # StyleRule（セレクタを持つ通常のCSSルール）を対象とする
+        if rule.type == rule.STYLE_RULE:
+            for property in rule.style:
+                # プロパティの値に 'url(' が含まれているかチェック
+                if "url(" in property.cssValue.cssText:
+                    # cssutilsのValueオブジェクトを使って値を取得・操作
+                    # url()関数を解析し、中のパス部分（URI）を変更する
+                    new_values = []
+
+                    for value in property.cssValue:
+                        # Valueの種類がCSSFunction.URI_FUNCTION(url())であるかを確認
+                        if value.type == "URI":  # CSSFunction.CSS_URI:
+                            old_path = value.uri
+
+                            new_path = generate_new_path(old_path, profile=profile)
+                            # URIの値を新しいパスに変更
+                            value.uri = new_path
+                            new_values.append(value.cssText)
+                        else:
+                            # url()関数ではない他の値はそのまま維持
+                            new_values.append(value.cssText)
+
+                    # 変更後の値をプロパティに再設定
+                    property.cssText = f"{property.name}: {' '.join(new_values)};"
+
+
+@html.command()
+@click.argument("input_file", type=click.Path(exists=True))
+@click.option("--output_file", "-o", type=click.Path(), default=None)
+@click.pass_context
+def css_url(ctx, input_file, output_file):
+    """CSSSの url の内容を変更します"""
+    if not output_file:
+        path = Path(input_file)
+        output_file = str(path.parent / f"out.{path.name}")
+
+    with open(input_file, encoding="utf-8") as f:
+        sheet = cssutils.parseString(f.read())
+        update_css_url_paths(sheet, profile=ctx.obj["profile"])
+
+    if sheet:
+        with open(output_file, "w", encoding="utf-8") as f:
+            # CSSの整形も自動で行われる (cssutils.CSSSerializer)
+            f.write(sheet.cssText.decode("utf-8"))
 
 
 @html.command()
