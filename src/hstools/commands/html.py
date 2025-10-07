@@ -6,15 +6,12 @@ from mimetypes import guess_type
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlsplit
 
-import click
 from bs4 import BeautifulSoup as Soup
-from dotenv import load_dotenv
 
 @click.group()
 @click.pass_context
 def html(ctx):
-    ctx.ensure_object(dict)
-    load_dotenv()
+    pass
 
 
 def generate_new_path(original_path):
@@ -69,6 +66,86 @@ def change_asset_url(soup, profile=None):
     _ = [change_assert_url_tag(tag, profile=profile) for tag in img_tags]
 
 
+
+
+def change_anchor_url_rule(href, profile: dict):
+    url = unquote(href)
+    obj = urlsplit(url)
+    path = str((Path("/") / obj.path).resolve())
+
+    if href.startswith("mailto"):
+        return href
+
+    mtype, _ = guess_type(path)
+    if mtype and mtype.startswith("image"):
+        return generate_new_path(path)
+
+    rules = profile.get("rules", None) or []
+    for rule in rules:
+        if re.search(rf"{rule[0]}", path):
+            path = re.sub(rf"{rule[0]}", rf"{rule[1]}", path)
+            break
+    if obj.query:
+        path = path + f"?{obj.query}"
+
+    return path  # , obj.query
+
+
+def change_anchor_url_tag(asset_tag, profile: dict):
+    tag_name = asset_tag.name
+    attr_name = "href"
+    original_src = asset_tag.get(attr_name)
+
+    if not original_src:
+        return
+
+    if original_src.startswith("http"):
+        # 絶対パスは変換しない(外部の可能性)
+        return
+
+    new_src = change_anchor_url_rule(original_src, profile)
+
+    asset_tag[attr_name] = new_src
+
+    click.echo(f"href変更:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
+
+
+def change_anchor_url(soup: Soup, profile: dict):
+    elms = soup.find_all(["a"])
+
+    if not elms:
+        click.echo("<a>タグが見つかりませんでした。")
+        return
+
+    _ = [change_anchor_url_tag(elm, profile) for elm in elms]
+
+
+def extract_elements(soup: Soup, profile: dict):
+    """コンテンツを抜き出して(src)アセットURLの変換を行う
+    - 不要な要素の削除(drops)
+    """
+    src = soup.select_one(profile["src"])
+    drops = profile.get("drops", None) or []
+
+    for i in drops:
+        elm = src.select_one(i)
+        elm and elm.extract()
+
+    change_asset_url(src, profile)
+    # change_anchor_url(src, profile)
+
+    return src
+
+
+def load_profile(profile):
+    if not profile:
+        return {}
+    path = Path(profile)
+    if not path.is_file or path.suffix != ".json":
+        return {}
+
+    profile_data = json.load(open(profile))
+    return profile_data
 
 @html.command()
 @click.argument("input_file", type=click.Path(exists=True))
@@ -154,86 +231,6 @@ def hs_url(ctx, src):
     THEME = os.environ["HUBSPOT_FOLDER"]
     dst = f"{{{{ get_asset_url('/{THEME}/{src}') }}}}"
     print(dst)
-
-
-def change_anchor_url_rule(href, profile: dict):
-    url = unquote(href)
-    obj = urlsplit(url)
-    path = str((Path("/") / obj.path).resolve())
-
-    if href.startswith("mailto"):
-        return href
-
-    mtype, _ = guess_type(path)
-    if mtype and mtype.startswith("image"):
-        return generate_new_path(path)
-
-    rules = profile.get("rules", None) or []
-    for rule in rules:
-        if re.search(rf"{rule[0]}", path):
-            path = re.sub(rf"{rule[0]}", rf"{rule[1]}", path)
-            break
-    if obj.query:
-        path = path + f"?{obj.query}"
-
-    return path  # , obj.query
-
-
-def change_anchor_url_tag(asset_tag, profile: dict):
-    tag_name = asset_tag.name
-    attr_name = "href"
-    original_src = asset_tag.get(attr_name)
-
-    if not original_src:
-        return
-
-    if original_src.startswith("http"):
-        # 絶対パスは変換しない(外部の可能性)
-        return
-
-    new_src = change_anchor_url_rule(original_src, profile)
-
-    asset_tag[attr_name] = new_src
-
-    click.echo(f"href変更:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
-
-
-def change_anchor_url(soup: Soup, profile: dict):
-    elms = soup.find_all(["a"])
-
-    if not elms:
-        click.echo("<a>タグが見つかりませんでした。")
-        return
-
-    _ = [change_anchor_url_tag(elm, profile) for elm in elms]
-
-
-def extract_elements(soup: Soup, profile: dict):
-    """コンテンツを抜き出して(src)アセットURLの変換を行う
-    - 不要な要素の削除(drops)
-    """
-    src = soup.select_one(profile["src"])
-    drops = profile.get("drops", None) or []
-
-    for i in drops:
-        elm = src.select_one(i)
-        elm and elm.extract()
-
-    change_asset_url(src, profile)
-    # change_anchor_url(src, profile)
-
-    return src
-
-
-def load_profile(profile):
-    if not profile:
-        return {}
-    path = Path(profile)
-    if not path.is_file or path.suffix != ".json":
-        return {}
-
-    profile_data = json.load(open(profile))
-    return profile_data
 
 
 @html.command()

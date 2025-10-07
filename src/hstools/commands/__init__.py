@@ -1,7 +1,7 @@
 import click
 import yaml
 
-from src.hstools.commands import html
+from . import html
 
 
 def load_ymal(path):
@@ -30,7 +30,7 @@ def main(ctx, src_portal, dst_portal, config):
     ctx.obj["dst_access_token"] = get_access_token(ctx.obj["config"], ctx.obj["dst_potal"])
 
 
-main.add_command(html.blogs)
+main.add_command(html.html)
 
 if __name__ == "__main__":
     main()
