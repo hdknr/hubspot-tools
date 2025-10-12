@@ -23,7 +23,7 @@ def generate_new_path(original_path, profile=None, base_path="/"):
     return public_path
 
 
-def change_assert_url_tag(asset_tag, profile=None):
+def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
     tag_name = asset_tag.name
     attr_name = "href" if tag_name in ["a", "link"] else "src"
     original_src = asset_tag.get(attr_name)
@@ -40,7 +40,7 @@ def change_assert_url_tag(asset_tag, profile=None):
         else:
             return
 
-    changed = change_anchor_url_rule(original_src, profile=profile)
+    changed = change_anchor_url_rule(original_src, profile=profile, base_path=base_path)
 
     original_src = changed
 
@@ -49,23 +49,23 @@ def change_assert_url_tag(asset_tag, profile=None):
         asset_tag[attr_name] = original_src
         return
 
-    new_src = generate_new_path(original_src, profile=profile)
+    new_src = generate_new_path(original_src, profile=profile, base_path=base_path)
 
     asset_tag[attr_name] = new_src
     click.echo(f"置き換え:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
 
 
-def change_asset_url(soup, profile=None):
+def change_asset_url(soup, profile=None, base_path="/"):
     img_tags = soup.find_all(["img", "script", "link", "a"])
 
     if not img_tags:
         click.echo("<img>タグが見つかりませんでした。")
         return
 
-    _ = [change_assert_url_tag(tag, profile=profile) for tag in img_tags]
+    _ = [change_assert_url_tag(tag, profile=profile, base_path=base_path) for tag in img_tags]
 
 
-def change_anchor_url_rule(href, profile: dict):
+def change_anchor_url_rule(href, profile: dict, base_path="/"):
     url = unquote(href)
     obj = urlsplit(url)
     path = str((Path("/") / obj.path).resolve())
@@ -75,7 +75,7 @@ def change_anchor_url_rule(href, profile: dict):
 
     mtype, _ = guess_type(path)
     if mtype and mtype.startswith("image"):
-        return generate_new_path(path, profile=profile)
+        return generate_new_path(path, profile=profile, base_path=base_path)
 
     rules = profile.get("anchor_rules", None) or []
     for rule in rules:
@@ -88,7 +88,7 @@ def change_anchor_url_rule(href, profile: dict):
     return path  # , obj.query
 
 
-def change_anchor_url_tag(asset_tag, profile: dict):
+def change_anchor_url_tag(asset_tag, profile: dict, base_path="/"):
     tag_name = asset_tag.name
     attr_name = "href"
     original_src = asset_tag.get(attr_name)
@@ -100,36 +100,37 @@ def change_anchor_url_tag(asset_tag, profile: dict):
         # 絶対パスは変換しない(外部の可能性)
         return
 
-    new_src = change_anchor_url_rule(original_src, profile)
+    new_src = change_anchor_url_rule(original_src, profile, base_path=base_path)
 
     asset_tag[attr_name] = new_src
 
     click.echo(f"href変更:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
 
 
-def change_anchor_url(soup: Soup, profile: dict):
+def change_anchor_url(soup: Soup, profile: dict, base_path="/"):
     elms = soup.find_all(["a"])
 
     if not elms:
         click.echo("<a>タグが見つかりませんでした。")
         return
 
-    _ = [change_anchor_url_tag(elm, profile) for elm in elms]
+    _ = [change_anchor_url_tag(elm, profile, base_path=base_path) for elm in elms]
 
 
-def extract_elements(soup: Soup, profile: dict):
+def extract_elements(soup: Soup, profile: dict, base_path="/"):
     """コンテンツを抜き出して(src)アセットURLの変換を行う
     - 不要な要素の削除(drops)
     """
-    src = soup.select_one(profile["src"])
-    drops = profile.get("drops", None) or []
+    extract = profile.get("extract", None) or {}
+    src = soup.select_one(extract["src"])
+
+    drops = extract.get("drops", None) or []
 
     for i in drops:
         elm = src.select_one(i)
         elm and elm.extract()
 
-    change_asset_url(src, profile)
-    # change_anchor_url(src, profile)
+    change_asset_url(src, profile, base_path=base_path)
 
     return src
 
@@ -185,7 +186,7 @@ def asset_url(ctx, input_file, output_file):
         click.echo(f"エラーが発生しました: {e}", err=True)
 
 
-def update_css_url_paths(sheet, profile=None, base_path=None):
+def update_css_url_paths(sheet, profile=None, base_path="/"):
     """CSSの url を 公開URLに変更"""
     # 2. 全てのルールとプロパティを走査し、url()を含むものを探す
     for rule in sheet:
@@ -289,23 +290,18 @@ def hs_url(ctx, src):
 
 @html.command()
 @click.argument("src_path")
-@click.option("--profile", "-p", default=None)
 @click.option("--output_file", "-o", type=click.Path(), default=None)
+@click.option("--base_path", "-b", default="/")
 @click.pass_context
-def extract(ctx, src_path, profile, output_file):
+def extract(ctx, src_path, output_file, base_path):
     """コンテンツ抜き出し"""
-    profile = profile or os.environ.get("EXTRACT_PROFILE", None)
+
     src = Path(src_path)
     if not src.is_file or src.suffix != ".html":
         print("source error")
         return
 
-    path = Path(profile)
-    if not path.is_file or path.suffix != ".json":
-        print("profile error")
-        return
-
-    profile_data = load_profile(profile)
+    profile_data = ctx.obj["profile"]
 
     if not output_file:
         path = Path(src_path)
@@ -313,6 +309,6 @@ def extract(ctx, src_path, profile, output_file):
 
     with open(src_path, encoding="utf-8") as f:
         soup = Soup(f, "html.parser")
-        res = extract_elements(soup, profile_data)
+        res = extract_elements(soup, profile_data, base_path=base_path)
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(str(res))
