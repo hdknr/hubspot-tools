@@ -10,11 +10,11 @@ import cssutils
 from bs4 import BeautifulSoup as Soup
 
 
-def generate_new_path(original_path, profile=None):
+def generate_new_path(original_path, profile=None, base_path="/"):
     """
     オリジナルのパスを新しいパターンに置換する関数。
     """
-    original_path = str((Path("/") / original_path).resolve())
+    original_path = str((Path(base_path) / original_path).resolve())
     if profile and "path_prefix" in profile:
         original_path = original_path.replace(profile["path_prefix"], "")
     original_path = original_path.replace("//", "/")
@@ -185,7 +185,7 @@ def asset_url(ctx, input_file, output_file):
         click.echo(f"エラーが発生しました: {e}", err=True)
 
 
-def update_css_url_paths(sheet, profile=None):
+def update_css_url_paths(sheet, profile=None, base_path=None):
     """CSSの url を 公開URLに変更"""
     # 2. 全てのルールとプロパティを走査し、url()を含むものを探す
     for rule in sheet:
@@ -204,8 +204,7 @@ def update_css_url_paths(sheet, profile=None):
                         if value.type == "URI":  # CSSFunction.CSS_URI:
                             old_path = value.uri
 
-                            new_path = generate_new_path(old_path, profile=profile)
-                            print("@@@@", old_path, "->", new_path)
+                            new_path = generate_new_path(old_path, profile=profile, base_path=base_path)
                             # URIの値を新しいパスに変更
                             value.uri = new_path
                             new_values.append(value.cssText)
@@ -220,8 +219,9 @@ def update_css_url_paths(sheet, profile=None):
 @html.command()
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--output_file", "-o", type=click.Path(), default=None)
+@click.option("--base_path", "-b", default=None)
 @click.pass_context
-def css_url(ctx, input_file, output_file):
+def css_url(ctx, input_file, output_file, base_path):
     """CSSSの url の内容を変更します"""
     if not output_file:
         path = Path(input_file)
@@ -229,7 +229,7 @@ def css_url(ctx, input_file, output_file):
 
     with open(input_file, encoding="utf-8") as f:
         sheet = cssutils.parseString(f.read())
-        update_css_url_paths(sheet, profile=ctx.obj["profile"])
+        update_css_url_paths(sheet, profile=ctx.obj["profile"], base_path=base_path)
 
     if sheet:
         with open(output_file, "w", encoding="utf-8") as f:
