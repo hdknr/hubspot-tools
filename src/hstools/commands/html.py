@@ -189,8 +189,9 @@ def update_css_url_paths(sheet, profile=None):
     """CSSの url を 公開URLに変更"""
     # 2. 全てのルールとプロパティを走査し、url()を含むものを探す
     for rule in sheet:
+        # breakpoint()
         # StyleRule（セレクタを持つ通常のCSSルール）を対象とする
-        if rule.type == rule.STYLE_RULE:
+        if rule.type in [rule.STYLE_RULE, rule.FONT_FACE_RULE]:
             for property in rule.style:
                 # プロパティの値に 'url(' が含まれているかチェック
                 if "url(" in property.cssValue.cssText:
@@ -204,6 +205,7 @@ def update_css_url_paths(sheet, profile=None):
                             old_path = value.uri
 
                             new_path = generate_new_path(old_path, profile=profile)
+                            print("@@@@", old_path, "->", new_path)
                             # URIの値を新しいパスに変更
                             value.uri = new_path
                             new_values.append(value.cssText)
