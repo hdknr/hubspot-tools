@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 import yaml
+from dotenv import load_dotenv
 
 from . import html
 
@@ -26,6 +27,7 @@ def get_access_token(config, portal):
 @click.pass_context
 def main(ctx, src_portal, dst_portal, config):
     ctx.ensure_object(dict)
+    load_dotenv()
     if Path(config).is_file():
         ctx.obj["config"] = load_ymal(config)
         if not src_portal:
