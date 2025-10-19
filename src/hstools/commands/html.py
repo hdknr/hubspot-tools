@@ -10,13 +10,15 @@ import cssutils
 from bs4 import BeautifulSoup as Soup
 
 
-def generate_new_path(original_path, profile=None, base_path="/"):
+def generate_hubspot_asset_url(original_path, profile=None, base_path="/"):
     """
     オリジナルのパスを新しいパターンに置換する関数。
     """
     original_path = str((Path(base_path) / original_path).resolve())
+
     if profile and "path_prefix" in profile:
         original_path = original_path.replace(profile["path_prefix"], "")
+
     original_path = original_path.replace("//", "/")
     THEME = os.environ["HUBSPOT_FOLDER"]
     public_path = f"{{{{get_asset_url('/{THEME}{original_path}') }}}}"
@@ -25,7 +27,14 @@ def generate_new_path(original_path, profile=None, base_path="/"):
 
 def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
     tag_name = asset_tag.name
-    attr_name = "href" if tag_name in ["a", "link"] else "src"
+
+    if tag_name in ["a", "link"]:
+        attr_name = "href"
+    elif tag_name in ["source"]:
+        attr_name = "srcset"
+    else:
+        attr_name = "src"
+
     original_src = asset_tag.get(attr_name)
 
     if not original_src:
@@ -49,7 +58,7 @@ def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
         asset_tag[attr_name] = original_src
         return
 
-    new_src = generate_new_path(original_src, profile=profile, base_path=base_path)
+    new_src = generate_hubspot_asset_url(original_src, profile=profile, base_path=base_path)
 
     asset_tag[attr_name] = new_src
     click.echo(f"置き換え:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
@@ -75,7 +84,7 @@ def change_anchor_url_rule(href, profile: dict, base_path="/"):
 
     mtype, _ = guess_type(path)
     if mtype and mtype.startswith("image"):
-        return generate_new_path(path, profile=profile, base_path=base_path)
+        return generate_hubspot_asset_url(path, profile=profile, base_path=base_path)
 
     rules = profile.get("anchor_rules", None) or []
     for rule in rules:
@@ -205,7 +214,7 @@ def update_css_url_paths(sheet, profile=None, base_path="/"):
                         if value.type == "URI":  # CSSFunction.CSS_URI:
                             old_path = value.uri
 
-                            new_path = generate_new_path(old_path, profile=profile, base_path=base_path)
+                            new_path = generate_hubspot_asset_url(old_path, profile=profile, base_path=base_path)
                             # URIの値を新しいパスに変更
                             value.uri = new_path
                             new_values.append(value.cssText)
