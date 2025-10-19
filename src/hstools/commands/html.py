@@ -65,7 +65,7 @@ def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
 
 
 def change_asset_url(soup, profile=None, base_path="/"):
-    img_tags = soup.find_all(["img", "script", "link", "a"])
+    img_tags = soup.find_all(["img", "script", "link", "a", "source"])
 
     if not img_tags:
         click.echo("<img>タグが見つかりませんでした。")
