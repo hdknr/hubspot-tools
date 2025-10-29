@@ -40,6 +40,10 @@ def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
     if not original_src:
         return
 
+    if original_src.startswith("tel:"):
+        return
+    if original_src.startswith("mailto:"):
+        return
     if original_src.startswith("http"):
         # 絶対パスは変換しない(外部の可能性)
         parsed = urlparse(original_src)
@@ -199,7 +203,6 @@ def update_css_url_paths(sheet, profile=None, base_path="/"):
     """CSSの url を 公開URLに変更"""
     # 2. 全てのルールとプロパティを走査し、url()を含むものを探す
     for rule in sheet:
-        # breakpoint()
         # StyleRule（セレクタを持つ通常のCSSルール）を対象とする
         if rule.type in [rule.STYLE_RULE, rule.FONT_FACE_RULE]:
             for property in rule.style:
@@ -241,7 +244,6 @@ def css_url(ctx, input_file, output_file, base_path):
         sheet = cssutils.parseString(f.read())
         update_css_url_paths(sheet, profile=ctx.obj["profile"], base_path=base_path)
 
-    if sheet:
         with open(output_file, "w", encoding="utf-8") as f:
             # CSSの整形も自動で行われる (cssutils.CSSSerializer)
             f.write(sheet.cssText.decode("utf-8"))
