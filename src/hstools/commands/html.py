@@ -25,47 +25,70 @@ def generate_hubspot_asset_url(original_path, profile=None, base_path="/"):
     return public_path
 
 
-def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
-    tag_name = asset_tag.name
-
-    if tag_name in ["a", "link"]:
-        attr_name = "href"
-    elif tag_name in ["source"]:
-        attr_name = "srcset"
-    else:
-        attr_name = "src"
-
-    original_src = asset_tag.get(attr_name)
-
-    if not original_src:
+def change_url(original_url, profile=None, base_path="/"):
+    if not original_url:
         return
 
-    if original_src.startswith("tel:"):
+    if original_url.startswith("tel:"):
         return
-    if original_src.startswith("mailto:"):
+    if original_url.startswith("mailto:"):
         return
-    if original_src.startswith("http"):
+    if original_url.startswith("http"):
         # 絶対パスは変換しない(外部の可能性)
-        parsed = urlparse(original_src)
+        parsed = urlparse(original_url)
         if parsed.netloc == os.environ.get("TARGET_CNAME", ""):
-            original_src = parsed.path
+            original_url = parsed.path
 
         else:
             return
 
-    changed = change_anchor_url_rule(original_src, profile=profile, base_path=base_path)
+    changed = change_anchor_url_rule(original_url, profile=profile, base_path=base_path)
+    if changed.startswith("{{"):
+        return changed
 
-    original_src = changed
+    original_url = changed
 
-    mt, _ = guess_type(original_src)
+    mt, _ = guess_type(original_url)
     if not mt or mt in ["text/html"]:
-        asset_tag[attr_name] = original_src
         return
 
-    new_src = generate_hubspot_asset_url(original_src, profile=profile, base_path=base_path)
+    new_src = generate_hubspot_asset_url(original_url, profile=profile, base_path=base_path)
 
-    asset_tag[attr_name] = new_src
-    click.echo(f"置き換え:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
+    return new_src
+
+
+def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
+    tag_name = asset_tag.name
+
+    if tag_name in ["a", "link"]:
+        attr_name_set = ["href"]
+    elif tag_name in ["source"]:
+        attr_name_set = ["srcset"]
+    else:
+        attr_name_set = ["src", "srcset"]
+
+    for attr_name in attr_name_set:
+        original_src = asset_tag.get(attr_name)
+        if attr_name == "srcset":
+            new_srcset = []
+            for entry in original_src.split(","):
+                parts = entry.strip().split()
+                if not parts:
+                    continue
+                descriptor = " ".join(parts[1:])
+                new_src = change_url(parts[0], profile=profile, base_path=base_path)
+                new_parts = new_src or parts[0]
+
+                new_entry = f"{new_parts} {descriptor}" if descriptor else new_parts
+                new_srcset.append(new_entry)
+            new_src = ", ".join(new_srcset)
+        else:
+            new_src = change_url(original_src, profile=profile, base_path=base_path)
+            if not new_src:
+                continue
+
+        asset_tag[attr_name] = new_src
+        click.echo(f"置き換え:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
 
 
 def change_asset_url(soup, profile=None, base_path="/"):
