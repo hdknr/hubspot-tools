@@ -69,6 +69,9 @@ def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
 
     for attr_name in attr_name_set:
         original_src = asset_tag.get(attr_name)
+        if not original_src:
+            continue
+
         if attr_name == "srcset":
             new_srcset = []
             for entry in original_src.split(","):
