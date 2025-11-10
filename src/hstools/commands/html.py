@@ -262,6 +262,7 @@ def update_css_url_paths(sheet, profile=None, base_path="/"):
 @click.pass_context
 def css_url(ctx, input_file, output_file, base_path):
     """CSSSの url の内容を変更します"""
+    base_path = base_path or "/"
     if not output_file:
         path = Path(input_file)
         output_file = str(path.parent / f"out.{path.name}")
