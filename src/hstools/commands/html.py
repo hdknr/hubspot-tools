@@ -95,34 +95,39 @@ def change_assert_url_tag(asset_tag, profile=None, base_path="/"):
 
 
 def change_asset_url(soup, profile=None, base_path="/"):
-    img_tags = soup.find_all(["img", "script", "link", "a", "source"])
+    tags = ["img", "script", "link", "a", "source"]
 
-    if not img_tags:
-        click.echo("<img>タグが見つかりませんでした。")
+    founds = soup.find_all(tags)
+    if not founds:
+        click.echo(f"{tags}:タグが見つかりませんでした。")
         return
 
-    _ = [change_assert_url_tag(tag, profile=profile, base_path=base_path) for tag in img_tags]
+    _ = [change_assert_url_tag(tag, profile=profile, base_path=base_path) for tag in founds]
+
+
+def modify_by_rule(path, profile: dict):
+    rules = profile.get("anchor_rules", None) or []
+    for rule in rules:
+        if re.search(rf"{rule[0]}", path):
+            return re.sub(rf"{rule[0]}", rf"{rule[1]}", path)
+    return path
 
 
 def change_anchor_url_rule(href, profile: dict, base_path="/"):
     url = unquote(href)
     obj = urlsplit(url)
-    path = str((Path("/") / obj.path).resolve())
+    path = str((Path(base_path) / obj.path).resolve())
 
     if href.startswith("mailto"):
         return href
 
     mtype, _ = guess_type(path)
+    path = modify_by_rule(path, profile)
     if mtype and mtype.startswith("image"):
         return generate_hubspot_asset_url(path, profile=profile, base_path=base_path)
 
-    rules = profile.get("anchor_rules", None) or []
-    for rule in rules:
-        if re.search(rf"{rule[0]}", path):
-            path = re.sub(rf"{rule[0]}", rf"{rule[1]}", path)
-            break
-    if obj.query:
-        path = path + f"?{obj.query}"
+    path = obj.fragment and f"{path}#{obj.fragment}" or path
+    path = obj.query and f"{path}?{obj.query}" or path
 
     return path  # , obj.query
 
@@ -144,16 +149,6 @@ def change_anchor_url_tag(asset_tag, profile: dict, base_path="/"):
     asset_tag[attr_name] = new_src
 
     click.echo(f"href変更:  {tag_name}.{attr_name}: {original_src} -> {new_src}")
-
-
-def change_anchor_url(soup: Soup, profile: dict, base_path="/"):
-    elms = soup.find_all(["a"])
-
-    if not elms:
-        click.echo("<a>タグが見つかりませんでした。")
-        return
-
-    _ = [change_anchor_url_tag(elm, profile, base_path=base_path) for elm in elms]
 
 
 def extract_elements(soup: Soup, profile: dict, base_path="/"):
