@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 from mimetypes import guess_type
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlsplit
@@ -424,8 +425,17 @@ def generate_toc(soup, title="目次"):
 def make_nav(ctx, src_path, output_file):
     """ページ内ナビゲーションを作る"""
 
-    with open(src_path, encoding="utf-8") as f:
-        soup = Soup(f, "html.parser")
-        res = generate_toc(soup)
+    if src_path == "-":
+        content = sys.stdin.read()
+        if not content:
+            print("データがありません")
+            return
+        soup = Soup(content, "html.parser")
 
+    else:
+        with open(src_path, encoding="utf-8") as f:
+            soup = Soup(f, "html.parser")
+
+    if soup:
+        res = generate_toc(soup)
         print(res.prettify())
